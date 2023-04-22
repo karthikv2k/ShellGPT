@@ -27,4 +27,4 @@ Example output #1 -
 can_generate: True
 command: ls
 informational_command: False
-message_to_user: "I have the perfect command for you! Just execute 'ls' and you will see the list of files and directories in your current directory."
+message_to_user: "I have the perfect command for you!"
