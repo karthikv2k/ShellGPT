@@ -3,13 +3,18 @@ import os
 import platform
 import sys
 import threading
+from typing import Optional
 import openai
 import yaml
+import logging
 from prompt_toolkit import PromptSession
 from prompt_toolkit.keys import Keys
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.input.defaults import create_input
 from prompt_toolkit.layout.processors import BeforeInput
+from pydantic import BaseModel
+from pydantic import ValidationError
+import argparse
 
 # Read the prompt from the file prompts/self_reflection.txt
 with open("sys_prompt.txt", "r") as f:
@@ -52,18 +57,26 @@ def get_system_info() -> dict:
     }
 
 
-def send_query_to_openai(prompt: str) -> str:
+class OpenAIResponse(BaseModel):
+    message_to_user: str
+    can_generate: bool
+    command: Optional[str] = None
+    informational_command: bool = False
+
+
+def send_query_to_openai(prompt: str, model: str) -> OpenAIResponse:
     """
     Send a query to OpenAI API.
 
     Args:
         prompt (str): The prompt to send to OpenAI API.
+        model (str): The model to use for the API.
 
     Returns:
-        str: The response from the API.
+        OpenAIResponse: The response from the API parsed using the OpenAIResponse Pydantic model.
     """
     response = openai.ChatCompletion.create(
-        model="gpt-4",
+        model=model,
         messages=[
             {"role": "system", "content": SYS_PROMPT},
             {"role": "user", "content": prompt},
@@ -71,8 +84,9 @@ def send_query_to_openai(prompt: str) -> str:
         max_tokens=1000,
         temperature=0.7,
     )
-    return response.choices[0].message.content
-
+    logging.debug(f"OpenAI API response: {response}")
+    response_content = yaml.safe_load(response.choices[0].message.content)
+    return OpenAIResponse(**response_content)
 
 def execute_command(CMD_OUT: str) -> tuple:
     """
@@ -110,9 +124,10 @@ def print_output(cmd_output: list, pipe, process, color: str) -> None:
         color (str): The color code to use for printing the output.
     """
     for line in iter(pipe.readline, b""):
-        line_str = line.rstrip()
-        cmd_output.append(line_str)
-        print(f"{color}{line_str}{Color.END}")
+        if line != b"":
+            line_str = line.rstrip()
+            cmd_output.append(line_str)
+            print(f"{color}{line_str}{Color.END}")
         if line_str == "" and process.poll() is not None:
             break
     pipe.close()
@@ -166,7 +181,7 @@ def execute_command_rt_print(CMD_OUT: str) -> tuple:
         return msg, True
 
 
-def main() -> None:
+def main(model: str) -> None:
     """Main function."""
     try:
         system_info_txt = ", ".join(
@@ -193,6 +208,8 @@ def main() -> None:
             user_input = session.prompt(SHELL_PREFIX)
             if user_input.lower() == "exit":
                 break
+            if user_input.strip() == "":
+                continue
             context.append(f"User: {user_input}")
         errored = False
         informational_command = False
@@ -202,25 +219,30 @@ def main() -> None:
         prompt = f"{context_joined}\nShellGPT: What command should be executed to achieve the following task: {user_input}\n"
         if errored:
             prompt += "\nShellGPT: The previous command failed. Please provide a different command."
-        res_raw = send_query_to_openai(prompt)
-        try:
-            res = yaml.load(res_raw, Loader=yaml.FullLoader)
-        except yaml.YAMLError as exc:
-            context.append(
-                f"ShellGPT: Error: Your output is not valid YAML. Please try again."
-            )
-        message_to_user = res["message_to_user"]
-        print(f"{Color.CLI}{message_to_user}{Color.END}")
-        if res["can_generate"] == False:
+        
+        try: 
+            res = send_query_to_openai(prompt, model)
+        except ValidationError as err:
+            err_msg = "Got bad response from OpenAI. Trying again."
+            print(f"{Color.CMD_OUT}Error: {err_msg}{Color.END}")
+            context.append(f"Error: Certain output fields are missing {err}")
+            errored=True
             continue
-        if "command" not in res:
-            print("ShellGPT: Error: No command was generated. Please try again.")
+        except yaml.YAMLError as err:
+            err_msg = "Got bad response from OpenAI. Trying again."
+            print(f"{Color.CMD_OUT}Error: {err_msg}{Color.END}")
+            context.append(f"Error: invalid YAML please output fully valid YAML with proper escaping {err}")
+            errored=True
             continue
-        suggested_command = res["command"].strip()
+
+
+        print(f"{Color.CLI}{res.message_to_user}{Color.END}")
+        if not res.can_generate:
+            continue
+        suggested_command = res.command.strip()
         if suggested_command == "":
             continue
-        if "informational_command" in res:
-            informational_command = bool(res["informational_command"])
+        informational_command = res.informational_command
 
         # Command confirmation
         try:
@@ -246,12 +268,26 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="gpt-4",
+        choices=["gpt-4", "gpt-3.5-turbo"],
+        help="Choose the model to use for the OpenAI API.",
+    )
+    parser.add_argument("-d", "--debug", help="Enable debug logs", action="store_true")
+    args = parser.parse_args()
+    
+    log_level = logging.DEBUG if args.debug else logging.WARNING
+    logging.basicConfig(level=log_level, format='%(asctime)s - %(levelname)s - %(message)s')
+
     print("Welcome to ShellGPT! Type your tasks or questions, and ShellGPT will suggest commands to execute.")
     print("Type what you want to acieve, and press Enter. Then ShellGPT will ask you to confirm the command it generated.")
     print("You can optionally modify the command, and press Enter to execute it.")
     print("CTL+C can be used to cancel the current command.")
     print("To exit, type 'exit' and press Enter.")
     try:
-        main()
+        main(args.model)
     except KeyboardInterrupt:
         sys.exit(0)

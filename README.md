@@ -12,6 +12,10 @@ ShellGPT is an AI-powered command-line interface (CLI) that generates and execut
 
 ## Requirements
 
+### OpenAI Access
+- You need to have access to GPT4 API access (not ChatGPT Plus). You can use GPT3.5-Turbo model (`--model gpt-3.5-turbo` flag) but the experience will be very degraded.
+
+### Python
 - Python 3.6 or later
 - `openai` Python package
 - `prompt_toolkit` Python package
@@ -48,6 +52,7 @@ python shellgpt.py
 5. To exit ShellGPT, type `exit` and press Enter.
 
 ## Example
+![](https://raw.githubusercontent.com/karthikv2k/ShellGPT/main/screenshot.jpg)
 
 ```
 Welcome to ShellGPT! Type your tasks or questions, and ShellGPT will suggest commands to execute.
@@ -55,12 +60,12 @@ Type what you want to acieve, and press Enter. Then ShellGPT will ask you to con
 You can optionally modify the command, and press Enter to execute it.
 CTL+C can be used to cancel the current command.
 To exit, type 'exit' and press Enter.
-
-> List all files in the current directory
-cmd> ls
-file1.txt file2.txt file3.txt
-
-> exit
+> show my cloud run services
+Ah, I see you're a Google Cloud Run user! Execute 'gcloud run services list' to show your Cloud Run services.
+cmd> gcloud run services list
+   SERVICE  REGION       URL                                   LAST DEPLOYED BY      LAST DEPLOYED AT
+✔  prod     us-central1  https://prod-**********-uc.a.run.app  ******************  2023-04-11T02:14:50.133955Z
+✔  test     us-central1  https://test-**********-uc.a.run.app  ******************  2023-04-11T00:42:37.623346Z
 ```
 
 ## Troubleshooting

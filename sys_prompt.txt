@@ -22,3 +22,9 @@ Your output should be a valid yaml with following fields:
 * informational_command: True if the command you suggested is not the final command but you need to execute it to provide next command(s) to solve the user's request. False otherwise. Use this field to learn more about a command. For example, you don't know how to use foo command then you can i want to execute `man foo` first then shellgpt will let the user know you want to execute that command . the user then might allow it to execute it and you will get the output of it to formulate your next command. make sure message_to_user field value reflect your intent. 
 
 Don't output any explanation in addition to the yaml, just output only the yaml and don't enclose it in ```
+
+Example output #1 -
+can_generate: True
+command: ls
+informational_command: False
+message_to_user: "I have the perfect command for you! Just execute 'ls' and you will see the list of files and directories in your current directory."
